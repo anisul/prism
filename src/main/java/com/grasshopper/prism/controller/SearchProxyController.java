@@ -4,9 +4,12 @@ import com.grasshopper.prism.client.SearchApiClient;
 import com.grasshopper.prism.config.SearchProperties;
 import com.grasshopper.prism.domain.SearchApiRequest;
 import com.grasshopper.prism.domain.SearchIntent;
+import com.grasshopper.prism.domain.TransformResult;
+import com.grasshopper.prism.logging.SearchRequestLog;
 import com.grasshopper.prism.service.QueryTransformerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,26 +38,30 @@ public class SearchProxyController {
 
     @GetMapping
     public ResponseEntity<String> search(@RequestParam String q) {
-        log.info("Incoming query: '{}'", q);
+        String requestId = MDC.get("requestId");
+        log.info("Incoming query: '{}' | requestId={}", q, requestId);
 
-        SearchIntent intent = transformer.transform(q);
+        TransformResult result = transformer.transform(q);
+        SearchIntent intent = result.intent();
         boolean transformed = intent.confidence() >= properties.confidenceThreshold();
+
+        SearchRequestLog searchLog = SearchRequestLog.of(
+                requestId, q, intent, transformed, result.llmLatencyMs()
+        );
+        log.info(searchLog.toString());
 
         SearchApiRequest request = transformed
                 ? SearchApiRequest.from(intent, true)
                 : SearchApiRequest.passthrough(q);
 
-        log.info("Mode: {} | confidence: {} | queryString: {}",
-                transformed ? "TRANSFORMED" : "PASSTHROUGH",
-                intent.confidence(),
-                request.toQueryString());
-
         String upstreamResponse = searchApiClient.search(request);
 
         return ResponseEntity.ok()
+                .header("X-Request-Id", requestId)
                 .header("X-Search-Transformed", String.valueOf(transformed))
                 .header("X-Search-Confidence", String.valueOf(intent.confidence()))
                 .header("X-Search-Filters", intent.filters().toString())
+                .header("X-Search-Latency-Ms", String.valueOf(result.llmLatencyMs()))
                 .body(upstreamResponse);
     }
 }

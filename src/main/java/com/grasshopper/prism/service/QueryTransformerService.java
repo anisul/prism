@@ -2,6 +2,7 @@ package com.grasshopper.prism.service;
 
 import com.grasshopper.prism.domain.FilterEntry;
 import com.grasshopper.prism.domain.SearchIntent;
+import com.grasshopper.prism.domain.TransformResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -30,27 +31,29 @@ public class QueryTransformerService {
         this.systemPrompt = buildSystemPrompt();
     }
 
-    public SearchIntent transform(String rawQuery) {
+    public TransformResult transform(String rawQuery) {
         try {
+            long start = System.currentTimeMillis();
+
             String response = chatClient.prompt()
                     .system(systemPrompt)
                     .user(u -> u.text("""
-                            Extract search intent from this query: {query}
-                            
-                            {format}
-                            """)
+                        Extract search intent from this query: {query}
+                        
+                        {format}
+                        """)
                             .param("query", rawQuery)
                             .param("format", outputConverter.getFormat()))
                     .call()
                     .content();
 
+            long latencyMs = System.currentTimeMillis() - start;
             SearchIntent intent = outputConverter.convert(response);
-            return validate(intent, rawQuery);
+            return new TransformResult(validate(intent, rawQuery), latencyMs);
 
         } catch (Exception e) {
-            log.warn("LLM call failed for query '{}', falling back to passthrough. Reason: {}",
-                    rawQuery, e.getMessage());
-            return SearchIntent.passthrough(rawQuery);
+            log.warn("LLM call failed for query '{}', falling back. Reason: {}", rawQuery, e.getMessage());
+            return new TransformResult(SearchIntent.passthrough(rawQuery), 0L);
         }
     }
 
