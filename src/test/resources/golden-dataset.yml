@@ -1,0 +1,211 @@
+cases:
+
+  # ── Single filter (5 cases) ──────────────────────────────────────────
+  - input: "red shoes"
+    expectedSearchText: "shoes"
+    expectedFilters:
+      - key: color
+        value: red
+      - key: category
+        value: footwear
+    notes: "Color + implicit category. Should not keep 'red' in searchText."
+
+  - input: "Nike products"
+    expectedSearchText: ""
+    expectedFilters:
+      - key: brand
+        value: nike
+    notes: "Pure brand query. searchText should be empty or generic."
+
+  - input: "something blue"
+    expectedSearchText: ""
+    expectedFilters:
+      - key: color
+        value: blue
+    notes: "Vague query with single extractable filter."
+
+  - input: "show me furniture"
+    expectedSearchText: ""
+    expectedFilters:
+      - key: category
+        value: furniture
+    notes: "Explicit category, no other signal."
+
+  - input: "I want a black t-shirt"
+    expectedSearchText: "t-shirt"
+    expectedFilters:
+      - key: color
+        value: black
+      - key: category
+        value: clothing
+    notes: "Color + implicit category. 't-shirt' is meaningful searchText."
+
+  # ── Multi-filter (8 cases) ───────────────────────────────────────────
+  - input: "cheap large blue sofa"
+    expectedSearchText: "sofa"
+    expectedFilters:
+      - key: color
+        value: blue
+      - key: size
+        value: L
+      - key: category
+        value: furniture
+      - key: price_range
+        value: budget
+    notes: "Four filters in one query. 'cheap' → budget, 'large' → L."
+
+  - input: "premium Apple electronics"
+    expectedSearchText: ""
+    expectedFilters:
+      - key: brand
+        value: apple
+      - key: category
+        value: electronics
+      - key: price_range
+        value: premium
+    notes: "Three clean filters, no meaningful searchText beyond category."
+
+  - input: "cheap red Nike shoes"
+    expectedSearchText: "shoes"
+    expectedFilters:
+      - key: color
+        value: red
+      - key: brand
+        value: nike
+      - key: category
+        value: footwear
+      - key: price_range
+        value: budget
+    notes: "The flagship value contrast case. Four filters extracted cleanly."
+
+  - input: "large blue sofa"
+    expectedSearchText: "sofa"
+    expectedFilters:
+      - key: color
+        value: blue
+      - key: size
+        value: L
+      - key: category
+        value: furniture
+    notes: "Three filters. 'large' → L size mapping."
+
+  - input: "small pink kids toy"
+    expectedSearchText: "toy"
+    expectedFilters:
+      - key: color
+        value: pink
+      - key: size
+        value: S
+      - key: category
+        value: toys
+    notes: "'small' → S, 'kids toy' → toys category."
+
+  - input: "affordable Samsung phone"
+    expectedSearchText: "phone"
+    expectedFilters:
+      - key: brand
+        value: samsung
+      - key: price_range
+        value: budget
+      - key: category
+        value: electronics
+    notes: "'affordable' → budget. 'phone' stays as searchText."
+
+  - input: "luxury black Sony headphones"
+    expectedSearchText: "headphones"
+    expectedFilters:
+      - key: color
+        value: black
+      - key: brand
+        value: sony
+      - key: price_range
+        value: luxury
+      - key: category
+        value: electronics
+    notes: "Four filters. searchText is specific enough to keep."
+
+  - input: "mid range white Adidas trainers"
+    expectedSearchText: "trainers"
+    expectedFilters:
+      - key: color
+        value: white
+      - key: brand
+        value: adidas
+      - key: price_range
+        value: mid
+      - key: category
+        value: footwear
+    notes: "'mid range' → mid. 'trainers' is the searchText."
+
+  # ── Implicit filter (4 cases) ────────────────────────────────────────
+  - input: "something cosy for winter"
+    expectedSearchText: "cosy"
+    expectedFilters:
+      - key: category
+        value: clothing
+    notes: "No explicit filter. 'winter' hints at clothing. Low confidence expected."
+
+  - input: "a gift for a sporty friend"
+    expectedSearchText: "gift"
+    expectedFilters:
+      - key: category
+        value: sports
+    notes: "Implicit sports category from context. Confidence should be moderate."
+
+  - input: "back to school supplies"
+    expectedSearchText: "school supplies"
+    expectedFilters:
+      - key: category
+        value: books
+    notes: "Weak implicit mapping. LLM may or may not extract category — interesting edge case."
+
+  - input: "something for the living room"
+    expectedSearchText: ""
+    expectedFilters:
+      - key: category
+        value: furniture
+    notes: "Room context hints at furniture. No strong signal beyond that."
+
+  # ── No filter / passthrough (4 cases) ────────────────────────────────
+  - input: "laptop"
+    expectedSearchText: "laptop"
+    expectedFilters: []
+    notes: "Single generic noun. No filters extractable. Clean passthrough."
+
+  - input: "gift ideas"
+    expectedSearchText: "gift ideas"
+    expectedFilters: []
+    notes: "Too vague to filter. Full query should pass through."
+
+  - input: "new arrivals"
+    expectedSearchText: "new arrivals"
+    expectedFilters: []
+    notes: "UI-style phrase, no semantic filter signal."
+
+  - input: "best sellers"
+    expectedSearchText: "best sellers"
+    expectedFilters: []
+    notes: "Ranking intent, not filter intent. Passthrough."
+
+  # ── Ambiguous / low confidence (4 cases) ─────────────────────────────
+  - input: "good stuff"
+    expectedSearchText: "good stuff"
+    expectedFilters: []
+    notes: "Completely vague. Confidence should be very low (< 0.3)."
+
+  - input: "show me everything"
+    expectedSearchText: ""
+    expectedFilters: []
+    notes: "Browse intent, no query signal at all."
+
+  - input: "nice things for home"
+    expectedSearchText: "things for home"
+    expectedFilters:
+      - key: category
+        value: furniture
+    notes: "Weakly implicit furniture. LLM might hallucinate here — watch this case."
+
+  - input: "I need something urgently"
+    expectedSearchText: "something"
+    expectedFilters: []
+    notes: "Urgency is not a filter. No extractable signal."
