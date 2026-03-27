@@ -26,7 +26,7 @@ public class SearchApiClient {
 
         return webClient.get()
                 .uri(uriBuilder -> {
-                    var builder = uriBuilder.path("/search");
+                    var builder = uriBuilder.path("/products/search");
 
                     if (request.searchText() != null && !request.searchText().isBlank()) {
                         builder.queryParam("q", request.searchText());
