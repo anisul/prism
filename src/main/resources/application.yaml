@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: prism
+  ai:
+    google:
+      genai:
+        api-key: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+        chat:
+          options:
+            model: gemini-2.5-flash-lite
+            temperature: 0.2
+
+search:
+  confidence-threshold: 0.4
+  api:
+    base-url: https://placeholder-search-api.com

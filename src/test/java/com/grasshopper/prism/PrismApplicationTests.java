@@ -1,0 +1,13 @@
+package com.grasshopper.prism;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class PrismApplicationTests {
+
+	@Test
+	void contextLoads() {
+	}
+
+}
