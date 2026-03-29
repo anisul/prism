@@ -6,6 +6,9 @@ into clean, filterable search parameters.
 
 ---
 
+## Demo
+![Semantic Search Demo](/demo/prism-intent-demo-1.gif)
+
 ## How It Works
 
 ```
