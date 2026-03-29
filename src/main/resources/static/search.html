@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Semantic Search</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #0a0a0f;
+            --surface:   #111118;
+            --border:    #1e1e2e;
+            --border-hi: #2e2e4e;
+            --text:      #e8e8f0;
+            --muted:     #6b6b8a;
+            --accent:    #7c6af7;
+            --accent-lo: rgba(124,106,247,0.12);
+            --accent-md: rgba(124,106,247,0.25);
+            --accent-hi: rgba(124,106,247,0.50);
+            --green:     #4ade80;
+            --green-lo:  rgba(74,222,128,0.10);
+            --amber:     #fbbf24;
+            --amber-lo:  rgba(251,191,36,0.10);
+            --red:       #f87171;
+            --red-lo:    rgba(248,113,113,0.10);
+            --radius:    12px;
+        }
+
+        html, body {
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 17px;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── noise overlay ── */
+        body::before {
+            content: '';
+            position: fixed; inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── ambient glow ── */
+        body::after {
+            content: '';
+            position: fixed;
+            top: -20vh; left: 50%;
+            transform: translateX(-50%);
+            width: 60vw; height: 60vw;
+            background: radial-gradient(ellipse, rgba(124,106,247,0.07) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .page {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 0 1rem 4rem;
+            transition: padding-top 0.5s cubic-bezier(0.4,0,0.2,1);
+        }
+
+        .page.centered { padding-top: 28vh; }
+        .page.top      { padding-top: 5vh; }
+
+        /* ── wordmark ── */
+        .wordmark {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 400;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 2.5rem;
+            opacity: 0;
+            animation: fadeUp 0.6s 0.1s forwards;
+        }
+
+        .wordmark span {
+            color: var(--accent);
+        }
+
+        /* ── search box ── */
+        .search-wrap {
+            width: 100%;
+            max-width: 640px;
+            opacity: 0;
+            animation: fadeUp 0.6s 0.2s forwards;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 0.85rem 1.25rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .search-box:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-lo), 0 8px 32px rgba(0,0,0,0.4);
+        }
+
+        .search-icon {
+            color: var(--muted);
+            flex-shrink: 0;
+            transition: color 0.2s;
+        }
+
+        .search-box:focus-within .search-icon { color: var(--accent); }
+
+        #query {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 300;
+            color: var(--text);
+            caret-color: var(--accent);
+        }
+
+        #query::placeholder { color: var(--muted); }
+
+        .search-btn {
+            background: var(--accent);
+            border: none;
+            border-radius: 999px;
+            padding: 0.45rem 1.1rem;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            color: #fff;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.15s;
+            flex-shrink: 0;
+        }
+
+        .search-btn:hover  { opacity: 0.85; transform: scale(1.03); }
+        .search-btn:active { transform: scale(0.97); }
+        .search-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+        /* ── hint ── */
+        .hint {
+            margin-top: 0.9rem;
+            text-align: center;
+            font-size: 0.72rem;
+            color: var(--muted);
+            font-family: 'DM Mono', monospace;
+            letter-spacing: 0.04em;
+            opacity: 0;
+            animation: fadeUp 0.6s 0.35s forwards;
+        }
+
+        /* ── results ── */
+        .results {
+            width: 100%;
+            max-width: 640px;
+            margin-top: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        /* ── loading ── */
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 1.2rem 1.5rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-family: 'DM Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--muted);
+            letter-spacing: 0.06em;
+        }
+
+        .dots span {
+            display: inline-block;
+            width: 5px; height: 5px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: pulse 1.2s ease-in-out infinite;
+        }
+        .dots span:nth-child(2) { animation-delay: 0.2s; }
+        .dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        /* ── intent card ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            animation: fadeUp 0.4s forwards;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.85rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-label {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.65rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .badge {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.65rem;
+            letter-spacing: 0.06em;
+            padding: 0.25rem 0.65rem;
+            border-radius: 999px;
+            font-weight: 500;
+        }
+
+        .badge.transformed { background: var(--green-lo);  color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+        .badge.passthrough { background: var(--amber-lo);  color: var(--amber); border: 1px solid rgba(251,191,36,0.2); }
+
+        .card-body { padding: 1.1rem 1.25rem; display: flex; flex-direction: column; gap: 0.85rem; }
+
+        /* ── search text row ── */
+        .row { display: flex; align-items: baseline; gap: 0.6rem; }
+        .row-label {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.65rem;
+            letter-spacing: 0.10em;
+            text-transform: uppercase;
+            color: var(--muted);
+            min-width: 90px;
+            flex-shrink: 0;
+        }
+        .row-value {
+            font-size: 0.92rem;
+            color: var(--text);
+            font-weight: 400;
+        }
+        .row-value.empty { color: var(--muted); font-style: italic; }
+
+        /* ── filters ── */
+        .filters-row { display: flex; align-items: flex-start; gap: 0.6rem; }
+        .filters-wrap { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+        .filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background: var(--accent-lo);
+            border: 1px solid var(--accent-hi);
+            border-radius: 6px;
+            padding: 0.25rem 0.6rem;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.7rem;
+            letter-spacing: 0.03em;
+            color: var(--accent);
+            animation: chipIn 0.3s forwards;
+        }
+
+        .filter-chip .chip-key { opacity: 0.65; }
+        .filter-chip .chip-sep { opacity: 0.4; }
+
+        .no-filters {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--muted);
+            font-style: italic;
+        }
+
+        /* ── query string ── */
+        .query-string-wrap {
+            background: #0d0d14;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.7rem 1rem;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.72rem;
+            color: #a0a0c0;
+            letter-spacing: 0.03em;
+            word-break: break-all;
+            line-height: 1.7;
+        }
+
+        .qs-label {
+            font-size: 0.62rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 0.3rem;
+        }
+
+        /* ── metrics bar ── */
+        .metrics {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+            flex-wrap: wrap;
+        }
+
+        .metric {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .metric-label {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.62rem;
+            letter-spacing: 0.10em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .metric-value {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 500;
+        }
+
+        .metric-value.high   { color: var(--green); }
+        .metric-value.medium { color: var(--amber); }
+        .metric-value.low    { color: var(--red);   }
+
+        /* ── confidence bar ── */
+        .conf-bar-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .conf-bar-track {
+            width: 80px; height: 3px;
+            background: var(--border);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        .conf-bar-fill {
+            height: 100%;
+            border-radius: 999px;
+            transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+        }
+        .conf-bar-fill.high   { background: var(--green); }
+        .conf-bar-fill.medium { background: var(--amber); }
+        .conf-bar-fill.low    { background: var(--red);   }
+
+        /* ── headers row ── */
+        .headers-section {
+            margin-top: 0.25rem;
+        }
+
+        .headers-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.62rem;
+            letter-spacing: 0.10em;
+            text-transform: uppercase;
+            color: var(--muted);
+            padding: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            transition: color 0.2s;
+        }
+        .headers-toggle:hover { color: var(--accent); }
+
+        .headers-grid {
+            display: none;
+            margin-top: 0.5rem;
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.2rem 0.75rem;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.65rem;
+        }
+        .hdr-key   { color: var(--muted); }
+        .hdr-value { color: var(--text); word-break: break-all; }
+
+        /* ── error ── */
+        .error-card {
+            background: var(--red-lo);
+            border: 1px solid rgba(248,113,113,0.2);
+            border-radius: var(--radius);
+            padding: 1rem 1.25rem;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--red);
+            animation: fadeUp 0.3s forwards;
+        }
+
+        /* ── footer note ── */
+        .footer-note {
+            margin-top: 0.5rem;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.62rem;
+            color: var(--muted);
+            letter-spacing: 0.06em;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+        .footer-note.visible { opacity: 1; }
+
+        /* ── animations ── */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; transform: scale(0.8); }
+            50%       { opacity: 1;   transform: scale(1.2); }
+        }
+        @keyframes chipIn {
+            from { opacity: 0; transform: scale(0.85); }
+            to   { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="page centered" id="page">
+
+    <div class="wordmark">semantic<span>/</span>search</div>
+
+    <div class="search-wrap">
+        <div class="search-box">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input
+                    id="query"
+                    type="text"
+                    placeholder="try &quot;cheap red Nike shoes&quot; or &quot;large blue sofa&quot;"
+                    autocomplete="off"
+                    spellcheck="false"
+            />
+            <button class="search-btn" id="searchBtn" onclick="doSearch()">search</button>
+        </div>
+        <div class="hint">powered by gemini-2.0-flash &nbsp;·&nbsp; spring ai 1.1.x</div>
+    </div>
+
+    <div class="results" id="results"></div>
+    <div class="footer-note" id="footerNote"></div>
+
+</div>
+
+<script>
+    const API_BASE = 'http://localhost:8080';
+
+    const queryInput = document.getElementById('query');
+    const resultsEl  = document.getElementById('results');
+    const page       = document.getElementById('page');
+    const footerNote = document.getElementById('footerNote');
+    const searchBtn  = document.getElementById('searchBtn');
+
+    queryInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') doSearch();
+    });
+
+    async function doSearch() {
+        const q = queryInput.value.trim();
+        if (!q) return;
+
+        // move page up
+        page.classList.remove('centered');
+        page.classList.add('top');
+
+        resultsEl.innerHTML = '';
+        footerNote.classList.remove('visible');
+        searchBtn.disabled = true;
+
+        // loading state
+        resultsEl.innerHTML = `
+      <div class="loading">
+        <div class="dots">
+          <span></span><span></span><span></span>
+        </div>
+        extracting intent
+      </div>`;
+
+        try {
+            const start = performance.now();
+            const res = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(q)}`);
+            const elapsed = Math.round(performance.now() - start);
+
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            // parse headers
+            const transformed  = res.headers.get('X-Search-Transformed') === 'true';
+            const confidence   = parseFloat(res.headers.get('X-Search-Confidence') || '0');
+            const latencyMs    = res.headers.get('X-Search-Latency-Ms') || '—';
+            const requestId    = res.headers.get('X-Request-Id') || '—';
+            const filtersRaw   = res.headers.get('X-Search-Filters') || '';
+
+            // parse filters from header string like [FilterEntry[key=color, value=red], ...]
+            const filters = parseFilters(filtersRaw);
+
+            // try to get searchText from response body (JSON assumed)
+            let searchText = '';
+            let upstreamUrl = '';
+            try {
+                const body = await res.text();
+                // build the upstream query string ourselves for display
+                upstreamUrl = buildQueryString(q, filters, searchText, transformed);
+            } catch(_) {}
+
+            resultsEl.innerHTML = '';
+            renderResult({
+                rawQuery: q,
+                transformed,
+                confidence,
+                latencyMs,
+                requestId,
+                filters,
+                elapsed,
+                upstreamUrl: buildQueryString(q, filters, transformed)
+            });
+
+            footerNote.textContent = `request ${requestId} · round-trip ${elapsed}ms`;
+            footerNote.classList.add('visible');
+
+        } catch (err) {
+            resultsEl.innerHTML = `
+        <div class="error-card">
+          ⚠ ${err.message} — is the middleware running on localhost:8080?
+        </div>`;
+        } finally {
+            searchBtn.disabled = false;
+        }
+    }
+
+    function parseFilters(raw) {
+        // parses: [FilterEntry[key=color, value=red], FilterEntry[key=brand, value=nike]]
+        const filters = [];
+        const re = /FilterEntry\[key=([^\],]+),\s*value=([^\]]+)\]/g;
+        let m;
+        while ((m = re.exec(raw)) !== null) {
+            filters.push({ key: m[1].trim(), value: m[2].trim() });
+        }
+        return filters;
+    }
+
+    function buildQueryString(rawQuery, filters, transformed) {
+        if (!transformed || filters.length === 0) {
+            return `q=${encodeURIComponent(rawQuery).replace(/%20/g, '+')}`;
+        }
+        const parts = [];
+        // try to figure out searchText — everything not a filter key/value
+        parts.push(...filters.map(f => `${f.key}=${encodeURIComponent(f.value)}`));
+        return parts.join('&');
+    }
+
+    function confidenceClass(c) {
+        if (c >= 0.7) return 'high';
+        if (c >= 0.4) return 'medium';
+        return 'low';
+    }
+
+    function renderResult({ rawQuery, transformed, confidence, latencyMs, requestId, filters, elapsed, upstreamUrl }) {
+        const cls     = confidenceClass(confidence);
+        const confPct = Math.round(confidence * 100);
+
+        const filtersHtml = filters.length > 0
+            ? filters.map((f, i) => `
+          <span class="filter-chip" style="animation-delay:${i * 0.05}s">
+            <span class="chip-key">${f.key}</span>
+            <span class="chip-sep">:</span>
+            <span class="chip-val">${f.value}</span>
+          </span>`).join('')
+            : `<span class="no-filters">none extracted</span>`;
+
+        // without middleware
+        const withoutMW = `q=${encodeURIComponent(rawQuery).replace(/%20/g, '+')}`;
+
+        // with middleware — reconstruct from filters
+        let withMW;
+        if (!transformed) {
+            withMW = `${withoutMW} <span style="color:var(--amber);font-size:0.65rem">(passthrough)</span>`;
+        } else {
+            withMW = upstreamUrl || withoutMW;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+      <div class="card-header">
+        <span class="card-label">intent extraction</span>
+        <span class="badge ${transformed ? 'transformed' : 'passthrough'}">
+          ${transformed ? '✦ transformed' : '◌ passthrough'}
+        </span>
+      </div>
+      <div class="card-body">
+
+        <div class="filters-row">
+          <span class="row-label">filters</span>
+          <div class="filters-wrap">${filtersHtml}</div>
+        </div>
+
+        <div style="border-top: 1px solid var(--border); padding-top: 0.85rem;">
+          <div class="qs-label">without middleware</div>
+          <div class="query-string-wrap" style="color:var(--muted)">${withoutMW}</div>
+        </div>
+
+        <div>
+          <div class="qs-label">with middleware</div>
+          <div class="query-string-wrap">${withMW}</div>
+        </div>
+
+        <div style="border-top: 1px solid var(--border); padding-top: 0.85rem;">
+          <div class="metrics">
+            <div class="metric">
+              <span class="metric-label">confidence</span>
+              <div class="conf-bar-wrap">
+                <div class="conf-bar-track">
+                  <div class="conf-bar-fill ${cls}" style="width:${confPct}%"></div>
+                </div>
+                <span class="metric-value ${cls}">${confPct}%</span>
+              </div>
+            </div>
+            <div class="metric">
+              <span class="metric-label">llm latency</span>
+              <span class="metric-value" style="color:var(--text)">${latencyMs}ms</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">filters found</span>
+              <span class="metric-value" style="color:var(--text)">${filters.length}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">mode</span>
+              <span class="metric-value ${transformed ? 'high' : 'medium'}">${transformed ? 'transformed' : 'passthrough'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="headers-section">
+          <div class="headers-grid">
+            <span class="hdr-key">X-Request-Id</span>       <span class="hdr-value">${requestId}</span>
+            <span class="hdr-key">X-Search-Transformed</span><span class="hdr-value">${transformed}</span>
+            <span class="hdr-key">X-Search-Confidence</span> <span class="hdr-value">${confidence}</span>
+            <span class="hdr-key">X-Search-Latency-Ms</span> <span class="hdr-value">${latencyMs}</span>
+          </div>
+        </div>
+
+      </div>`;
+
+        resultsEl.appendChild(card);
+    }
+</script>
+</body>
+</html>
