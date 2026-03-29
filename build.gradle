@@ -27,6 +27,7 @@ dependencies {
 	implementation 'org.springframework.ai:spring-ai-starter-model-google-genai'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
@@ -38,4 +39,13 @@ dependencyManagement {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+tasks.register('eval', Test) {
+	useJUnitPlatform {
+		includeTags 'eval'
+	}
+	testLogging {
+		showStandardStreams = true
+	}
 }

@@ -46,13 +46,11 @@ cases:
     expectedFilters:
       - key: color
         value: blue
-      - key: size
-        value: L
       - key: category
         value: furniture
       - key: price_range
         value: budget
-    notes: "Four filters in one query. 'cheap' → budget, 'large' → L."
+    notes: "size:L excluded — 'large' is a furniture descriptor not a clothing size."
 
   - input: "premium Apple electronics"
     expectedSearchText: ""

@@ -1,6 +1,5 @@
 package com.grasshopper.prism.service;
 
-import com.grasshopper.prism.domain.FilterEntry;
 import com.grasshopper.prism.domain.SearchIntent;
 import com.grasshopper.prism.domain.TransformResult;
 import org.slf4j.Logger;
@@ -9,7 +8,6 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 
 @Service
 public class QueryTransformerService {
@@ -33,9 +31,9 @@ public class QueryTransformerService {
 
     public TransformResult transform(String rawQuery) {
         try {
-            long start = System.currentTimeMillis();
+            var start = System.currentTimeMillis();
 
-            String response = chatClient.prompt()
+            var response = chatClient.prompt()
                     .system(systemPrompt)
                     .user(u -> u.text("""
                         Extract search intent from this query: {query}
@@ -47,8 +45,11 @@ public class QueryTransformerService {
                     .call()
                     .content();
 
-            long latencyMs = System.currentTimeMillis() - start;
-            SearchIntent intent = outputConverter.convert(response);
+            var latencyMs = System.currentTimeMillis() - start;
+
+            assert response != null;
+            var intent = outputConverter.convert(response);
+
             return new TransformResult(validate(intent, rawQuery), latencyMs);
 
         } catch (Exception e) {
@@ -64,7 +65,7 @@ public class QueryTransformerService {
             return SearchIntent.passthrough(rawQuery);
         }
 
-        List<FilterEntry> validFilters = intent.filters().stream()
+        var validFilters = intent.filters().stream()
                 .filter(f -> catalogService.isValid(f.key(), f.value()))
                 .toList();
 
@@ -77,52 +78,71 @@ public class QueryTransformerService {
     }
 
     private String buildSystemPrompt() {
-        StringBuilder sb = new StringBuilder();
+        var sb = new StringBuilder();
 
         sb.append("""
-                You are a search intent extractor for an e-commerce platform.
-                
-                Your job is to analyse a natural language search query and extract:
-                1. A clean searchText — the core noun or product term, stripped of filter words.
-                   If the entire query is covered by filters, return an empty string for searchText.
-                2. A list of filters that match EXACTLY the allowed catalog below.
-                3. A confidence score from 0.0 to 1.0 reflecting how clearly the query maps to known filters.
-                
-                Rules:
-                - Only extract filters that are explicitly stated or very strongly implied.
-                - If you are not confident a filter applies, omit it rather than guessing.
-                - Extract ALL applicable filters, not just the most obvious one.
-                - Normalise synonyms to their exact catalog value:
-                            "cheap" / "affordable" / "inexpensive" → price_range:budget
-                            "expensive" / "high-end" → price_range:premium
-                            "luxury" / "designer" → price_range:luxury
-                            "mid range" / "moderate" → price_range:mid
-                            "large" / "big" / "extra large" → size:L
-                            "small" / "tiny" / "compact" → size:S
-                            "medium" → size:M
-                - Never invent filter keys or values that are not in the catalog.
-                - Confidence should be low (< 0.3) when the query is vague or has no extractable filters.
-                
-                Allowed filter catalog:
-                """);
+            You are a search intent extractor for an e-commerce platform.
+            
+            Your job is to analyse a natural language search query and extract:
+            1. A clean searchText — the core product noun only.
+               - Strip ALL filter words (colors, brands, sizes, price words).
+               - Strip ALL filler words: "show me", "I want", "something", "products",
+                 "items", "things", "me", "a", "the".
+               - If the category itself is the only noun and it maps to a catalog filter,
+                 return empty string — do not repeat the category as searchText.
+               - If a specific product type exists beyond the category
+                 (e.g. "t-shirt", "sofa", "headphones"), keep it as searchText.
+            2. A list of filters matching EXACTLY the allowed catalog below.
+            3. A confidence score 0.0–1.0.
+            
+            Rules:
+            - Only extract filters explicitly stated or very strongly implied.
+            - If not confident a filter applies, omit it rather than guessing.
+            - Extract ALL applicable filters, not just the most obvious one.
+            - Normalise synonyms to exact catalog values:
+                "cheap" / "affordable" / "inexpensive" → price_range:budget
+                "expensive" / "high-end"               → price_range:premium
+                "luxury" / "designer"                  → price_range:luxury
+                "mid range" / "moderate"               → price_range:mid
+                size (clothing and footwear only):
+                "large" / "big"                        → size:L
+                "small" / "tiny"                       → size:S
+                "medium"                               → size:M
+            - Never invent filter keys or values not in the catalog.
+            - Confidence < 0.3 when query is vague with no extractable filters.
+            - If the query is purely vague with no product signal, searchText = "".
+            
+            Allowed filter catalog:
+            """);
 
         catalogService.catalog().forEach((key, values) ->
                 sb.append(String.format("  %s: %s%n", key, String.join(", ", values)))
         );
 
         sb.append("""
-            
             Examples:
-            Input: "cheap red Nike shoes"
+            Input:  "cheap red Nike shoes"
             Output: searchText="shoes", filters=[color:red, brand:nike, category:footwear, price_range:budget], confidence=0.95
             
-            Input: "large blue sofa"
-            Output: searchText="sofa", filters=[color:blue, size:L, category:furniture], confidence=0.90
+            Input:  "Nike products"
+            Output: searchText="", filters=[brand:nike], confidence=0.85
             
-            Input: "good stuff"
+            Input:  "show me furniture"
+            Output: searchText="", filters=[category:furniture], confidence=0.90
+            
+            Input:  "something blue"
+            Output: searchText="", filters=[color:blue], confidence=0.50
+            
+            Input:  "premium Apple electronics"
+            Output: searchText="", filters=[brand:apple, category:electronics, price_range:premium], confidence=0.95
+            
+            Input:  "large blue sofa"
+            Output: searchText="sofa", filters=[color:blue, category:furniture], confidence=0.90
+            
+            Input:  "good stuff"
             Output: searchText="", filters=[], confidence=0.05
             
-            Input: "laptop"
+            Input:  "laptop"
             Output: searchText="laptop", filters=[], confidence=0.10
             """);
 

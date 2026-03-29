@@ -1,6 +1,5 @@
 package com.grasshopper.prism.service;
 
-import com.grasshopper.prism.domain.SearchIntent;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,7 +21,7 @@ class QueryTransformerSmokeTest {
         };
 
         for (String query : queries) {
-            SearchIntent intent = transformer.transform(query);
+            var result = transformer.transform(query);
             System.out.printf("""
                     ─────────────────────────────────
                     Query     : %s
@@ -31,9 +30,9 @@ class QueryTransformerSmokeTest {
                     Confidence: %.2f
                     %n""",
                     query,
-                    intent.searchText(),
-                    intent.filters(),
-                    intent.confidence()
+                    result.intent().searchText(),
+                    result.intent().filters(),
+                    result.intent().confidence()
             );
 
         }
