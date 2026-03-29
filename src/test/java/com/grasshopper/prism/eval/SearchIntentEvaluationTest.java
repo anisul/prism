@@ -35,6 +35,9 @@ class SearchIntentEvaluationTest {
             EvalResult result = evaluate(testCase, transformResult);
             results.add(result);
             printCaseResult(result);
+
+            // Avoid Gemini free tier rate limit (15 req/min)
+            Thread.sleep(4500);
         }
 
         printSummary(results);
